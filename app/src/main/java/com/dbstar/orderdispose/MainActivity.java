@@ -9,6 +9,8 @@ import android.content.IntentFilter;
 import android.content.ServiceConnection;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
+import android.hardware.usb.UsbDevice;
+import android.hardware.usb.UsbManager;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.IBinder;
@@ -59,10 +61,13 @@ import com.gprinter.command.LabelCommand;
 import com.gprinter.io.CustomerDisplay;
 import com.gprinter.io.GpDevice;
 import com.gprinter.io.GpEquipmentPort;
+import com.gprinter.io.PortParameters;
 import com.gprinter.service.GpPrintService;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Vector;
 
@@ -131,6 +136,8 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
     //自动更新服务连接对象
     private ServiceConnection conn_update = new AutoUpdateServiceConnection();
     private Button bt_update_dialog;
+    private PortParameters mPortParameters;
+    private Runnable mConnectToDevice;
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
@@ -203,6 +210,10 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         Intent intent = new Intent(this, AutoUpdateService.class);
         bindService(intent, conn_update, Context.BIND_AUTO_CREATE);
 
+        //开机自动连接打印机
+        connect2print();
+
+
         //网络监控
         /*
         NetworkManager.getInstance().initialized(this);
@@ -225,11 +236,158 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         */
     }
 
+    private void connect2print() {
+        mPortParameters = new PortParameters();
+        mPortParameters.setPortType(PortParameters.USB);
+        mPortParameters.setIpAddr("192.168.123.100");
+        mPortParameters.setPortNumber(9100);
+
+
+        UsbManager manager = (UsbManager) getSystemService(Context.USB_SERVICE);
+        // Get the list of attached devices
+        HashMap<String, UsbDevice> devices = manager.getDeviceList();
+        Iterator<UsbDevice> deviceIterator = devices.values().iterator();
+        int count = devices.size();
+        Log.d(TAG, "count " + count);
+        if(count > 0) {
+            while (deviceIterator.hasNext()) {
+                UsbDevice device = deviceIterator.next();
+                String devicename = device.getDeviceName();
+                Log.d(TAG, "devicename " + devicename);
+                if(checkUsbDevicePidVid(device)){
+                    mPortParameters.setUsbDeviceName(devicename);
+                }
+            }
+        }
+        // 一个打印机的接口信息
+        // mPortParameters
+        mConnectToDevice = new Runnable() {
+            @Override
+            public void run() {
+                Log.d(TAG, "run_UsbDeviceName " + mPortParameters.getUsbDeviceName());
+                connectOrDisConnectToDevice();
+            }
+        };
+        mHandler.postDelayed(mConnectToDevice, 2000);
+    }
+
+
+    boolean checkUsbDevicePidVid(UsbDevice dev) {
+        int pid = dev.getProductId();
+        int vid = dev.getVendorId();
+        boolean rel = false;
+        if ((vid == 34918 && pid == 256) || (vid == 1137 && pid == 85)
+                || (vid == 6790 && pid == 30084)
+                || (vid == 26728 && pid == 256) || (vid == 26728 && pid == 512)
+                || (vid == 26728 && pid == 256) || (vid == 26728 && pid == 768)
+                || (vid == 26728 && pid == 1024)|| (vid == 26728 && pid == 1280)
+                || (vid == 26728 && pid == 1536)) {
+            rel = true;
+        }
+        return rel;
+    }
+
+    /**
+     * 连接设备
+     *
+     * @param ，设备编号，设备列表 第 1 台设备
+     */
+    synchronized void connectOrDisConnectToDevice() {
+        //连接第一台打印机
+        int printerId = 0;
+        int rel = 0;
+        Log.e(TAG, String.valueOf(mPortParameters.getPortOpenState()));
+
+        if (mPortParameters.getPortOpenState() == false) {
+            //此时为断开情况，，拟连接
+            if (CheckPortParamters(mPortParameters)) {
+                try {
+                    mGpService.closePort(printerId);
+                } catch (RemoteException e) {
+                    e.printStackTrace();
+                }
+                switch (mPortParameters.getPortType()) {
+                    case PortParameters.USB:
+                        try {
+
+                            rel = mGpService.openPort(printerId, mPortParameters.getPortType(),
+                                    mPortParameters.getUsbDeviceName(), 0);
+                        } catch (RemoteException e) {
+                            // TODO Auto-generated catch block
+                            e.printStackTrace();
+                        }
+                        break;
+                    case PortParameters.ETHERNET:
+                        try {
+                            rel = mGpService.openPort(printerId, mPortParameters.getPortType(),
+                                    mPortParameters.getIpAddr(), mPortParameters.getPortNumber());
+                        } catch (RemoteException e) {
+                            // TODO Auto-generated catch block
+                            e.printStackTrace();
+                        }
+                        break;
+                    case PortParameters.BLUETOOTH:
+                        try {
+                            rel = mGpService.openPort(printerId, mPortParameters.getPortType(),
+                                    mPortParameters.getBluetoothAddr(), 0);
+                        } catch (RemoteException e) {
+                            e.printStackTrace();
+                        }
+                        break;
+                }
+                GpCom.ERROR_CODE r = GpCom.ERROR_CODE.values()[rel];
+                Log.e(TAG, "result :" + String.valueOf(r));
+                if (r != GpCom.ERROR_CODE.SUCCESS) {
+                    if (r == GpCom.ERROR_CODE.DEVICE_ALREADY_OPEN) {
+                        mPortParameters.setPortOpenState(true);
+                    } else {
+                        messageBox(GpCom.getErrorText(r));
+                    }
+                }
+            } else {
+                messageBox(getString(R.string.port_parameters_wrong));
+            }
+        } else {
+            //此时为连接情况，拟断开
+//            Log.d(TAG, "DisconnectToDevice ");
+//            try {
+//                mGpService.closePort(0);
+//            } catch (RemoteException e) {
+//                // TODO Auto-generated catch block
+//                e.printStackTrace();
+//            }
+        }
+    }
+
+    Boolean CheckPortParamters(PortParameters param) {
+        boolean rel = false;
+        int type = param.getPortType();
+        if (type == PortParameters.BLUETOOTH) {
+            if (!param.getBluetoothAddr().equals("")) {
+                rel = true;
+            }
+        } else if (type == PortParameters.ETHERNET) {
+            if ((!param.getIpAddr().equals("")) && (param.getPortNumber() != 0)) {
+                rel = true;
+            }
+        } else if (type == PortParameters.USB) {
+            if (!param.getUsbDeviceName().equals("")) {
+                rel = true;
+            }
+        }
+        return rel;
+    }
+
+    private void messageBox(String err) {
+        Toast.makeText(getApplicationContext(), err, Toast.LENGTH_SHORT).show();
+    }
+
     @Override
     protected void onResume() {
         super.onResume();
         //访问网络，刷新订单列表
         getUnHandleOrderList();
+        mHandler.postDelayed(mConnectToDevice, 1000);
     }
 
     public boolean onCreateOptionsMenu(Menu menu) {
@@ -290,7 +448,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
 
 
     //根据订单号，获取详情数据
-    public void getDetailList(String seqnumber,final Boolean isPrintOnGet) {
+    public void getDetailList(String seqnumber, final Boolean isPrintOnGet) {
 
         String urlOrderDetail = application.getServiceIP() + URL.OrderItem + "?" + URL.NUMBER + "=" + seqnumber;
         try {
@@ -303,13 +461,13 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                     orderDetail = null;
                     try {
                         orderDetail = new Gson().fromJson(json, OrderDetail.class);
-                    }catch (Exception e){
+                    } catch (Exception e) {
                         e.printStackTrace();
                     }
 
                     datasDetail.clear();
 
-                    if(orderDetail==null){
+                    if (orderDetail == null) {
                         //刷新详情列表
                         mHandler.sendEmptyMessage(4);
                         return;
@@ -332,7 +490,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
 
                 }
             });
-        }catch (Exception e){
+        } catch (Exception e) {
             e.printStackTrace();
         }
     }
@@ -372,12 +530,12 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                     Order order = null;
                     try {
                         order = new Gson().fromJson(json, Order.class);
-                    }catch (Exception e){
+                    } catch (Exception e) {
                         e.printStackTrace();
                     }
                     Log.d(TAG, "未处理订单: " + order);
 
-                    if(order==null){
+                    if (order == null) {
                         return;
                     }
 
@@ -393,7 +551,6 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                     mHandler.sendEmptyMessage(2);
 
 
-
                     //如果设置了自动打印，把第一条打印出来
                     if (application.isPrintAuto()) {
                         Order.OrderBean datas_0 = null;
@@ -403,17 +560,17 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                         }
                         //无论什么情况，获取到订单列表，把第一条订单抓取出来，显示在详情列表中
                         if (datas_0 != null) {
-                            String seqs =  datas_0.getNumber();
+                            String seqs = datas_0.getNumber();
                             //访问订单详情并打印出来
                             //打印前给房间号、订单号赋值
                             orderNumber = seqs;
                             orderRoomId = datas_0.getRoomId();
                             orderTime = datas_0.getCreatedate();
-                            getDetailList(seqs,true);
+                            getDetailList(seqs, true);
                         } else {
                             isOrderPrinting = false;
                         }
-                    }else {
+                    } else {
                         //通知主线程，刷新详情列表，置空详情列表
                         orderDetail = null;
                         datasDetail.clear();
@@ -427,7 +584,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
 
                 }
             });
-        }catch (Exception e){
+        } catch (Exception e) {
             e.printStackTrace();
         }
 
@@ -446,14 +603,14 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                     Order order = null;
                     try {
                         order = new Gson().fromJson(json, Order.class);
-                    }catch (Exception e){
+                    } catch (Exception e) {
                         e.printStackTrace();
                     }
                     Log.d(TAG, "未处理订单: " + order);
 
                     //通知主线程，刷新订单列表
                     datas.clear();
-                    if(order!=null){
+                    if (order != null) {
                         datas.addAll(order.getData());
                     }
                     mHandler.sendEmptyMessage(2);
@@ -469,7 +626,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
 
                 }
             });
-        }catch (Exception e){
+        } catch (Exception e) {
             e.printStackTrace();
         }
 
@@ -507,7 +664,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                     //
                 }
             });
-        }catch (Exception e){
+        } catch (Exception e) {
             e.printStackTrace();
         }
     }
@@ -697,7 +854,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         if (conn != null) {
             unbindService(conn); // unBindService
         }
-        if(conn_update != null){
+        if (conn_update != null) {
             unbindService(conn_update);
         }
         unregisterReceiver(mBroadcastReceiver);
@@ -717,7 +874,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                     break;
                 case 2:
                     //点击 radio button ,刷新 订单列表
-                    if( flag_list == UNHANDLELIST){
+                    if (flag_list == UNHANDLELIST) {
                         main_rb_unhandlelist.setChecked(true);
                     }
                     mMyAdapter.setFlag(false);
@@ -729,7 +886,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                     orderTime = bundle.getString("orderTime");
                     orderRoomId = bundle.getString("orderRoomId");
                     orderNumber = bundle.getString("orderNumber");
-                    getDetailList(orderNumber,false);
+                    getDetailList(orderNumber, false);
                     break;
                 case 4:
                     //刷新详情列表
@@ -754,15 +911,15 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                     runOnUiThread(new Runnable() {
                         @Override
                         public void run() {
-                            if(isUpdate==Constant.MSG_NET_ERR){
-                                if(mNewOrderDialog != null && !mNewOrderDialog.isShowing()){
+                            if (isUpdate == Constant.MSG_NET_ERR) {
+                                if (mNewOrderDialog != null && !mNewOrderDialog.isShowing()) {
                                     bt_update_dialog.setText("网络连接断开，请检查网络");
                                     mNewOrderDialog.show();
                                 }
                                 return;
                             }
-                            if(isUpdate==Constant.MSG_NET_OK){
-                                if(mNewOrderDialog != null && mNewOrderDialog.isShowing()){
+                            if (isUpdate == Constant.MSG_NET_OK) {
+                                if (mNewOrderDialog != null && mNewOrderDialog.isShowing()) {
                                     mNewOrderDialog.dismiss();
                                 }
                                 return;
@@ -776,7 +933,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                                 //打印新订单
                                 //1、访问网络，获取新的订单
                                 getUnHandleOrderList();
-                                    //获取新订单后，就判断是否打印新订单，是自动打印新订单，就打印
+                                //获取新订单后，就判断是否打印新订单，是自动打印新订单，就打印
                                 flag_list = UNHANDLELIST;
                                 main_rb_unhandlelist.setChecked(true);
                             }

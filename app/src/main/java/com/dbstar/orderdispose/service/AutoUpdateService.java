@@ -38,6 +38,8 @@ public class AutoUpdateService extends Service {
     private Handler handler;
     private static final String TAG = "dsw_AutoUpdateService";
     private MediaPlayer mediaPlayer;
+    private AlarmManager manager;
+    private PendingIntent pi;
 
     @Override
     public void onCreate() {
@@ -46,11 +48,11 @@ public class AutoUpdateService extends Service {
         application = (MyApplication) getApplication();
 
         //绑定方式不会直接开 onStartCommand
-        AlarmManager manager = (AlarmManager) getSystemService(ALARM_SERVICE);
+        manager = (AlarmManager) getSystemService(ALARM_SERVICE);
         int anHour = 1 * 1 * 10 * 1000; // 这是1分钟的毫秒数
         long triggerAtTime = SystemClock.elapsedRealtime() + anHour;
         Intent i = new Intent(this, AutoUpdateService.class);
-        PendingIntent pi = PendingIntent.getService(this, 0, i, 0);
+        pi = PendingIntent.getService(this, 0, i, 0);
         manager.cancel(pi);
         manager.set(AlarmManager.ELAPSED_REALTIME_WAKEUP, triggerAtTime, pi);
 
@@ -89,6 +91,18 @@ public class AutoUpdateService extends Service {
         }.start();
     }
 
+    @Override
+    public void onDestroy() {
+
+        if(manager!=null && pi!=null){
+            manager.cancel(pi);
+        }
+
+
+        super.onDestroy();
+
+    }
+
     private OnMessageListener onMessageListener;
     public void setOnMessageListener(OnMessageListener onMessageListener) {
         this.onMessageListener = onMessageListener;
@@ -106,7 +120,7 @@ public class AutoUpdateService extends Service {
         long triggerAtTime = SystemClock.elapsedRealtime() + anHour;
         Intent i = new Intent(this, AutoUpdateService.class);
         PendingIntent pi = PendingIntent.getService(this, 0, i, 0);
-        manager.cancel(pi);
+        //manager.cancel(pi);
         manager.set(AlarmManager.ELAPSED_REALTIME_WAKEUP, triggerAtTime, pi);
 
         return super.onStartCommand(intent, flags, startId);

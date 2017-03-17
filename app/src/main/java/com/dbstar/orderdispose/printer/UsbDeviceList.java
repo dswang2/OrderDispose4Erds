@@ -76,7 +76,8 @@ public class UsbDeviceList extends Activity {
 				UsbDevice device = deviceIterator.next();
 				String devicename = device.getDeviceName();
 				if(checkUsbDevicePidVid(device)){
-					mUsbDeviceArrayAdapter.add(devicename);	
+					mUsbDeviceArrayAdapter.add(devicename);
+					Log.d("UsbDeviceList","devicename ="+devicename);
 				}
 			} 
 		}
