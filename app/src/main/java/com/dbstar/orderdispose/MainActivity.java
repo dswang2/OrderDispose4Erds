@@ -212,28 +212,6 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
 
         //开机自动连接打印机
         connect2print();
-
-
-        //网络监控
-        /*
-        NetworkManager.getInstance().initialized(this);
-        if(!NetworkManager.getInstance().isNetworkConnected()){
-            ToastUtils.showSafeToast(this,"无网络已连接");
-        }
-        NetworkManager.getInstance().registerNetworkObserver(new NetworkObserver() {
-            @Override
-            public void onNetworkStateChanged(boolean networkConnected, NetworkInfo currentNetwork, NetworkInfo lastNetwork) {
-                if(networkConnected && currentNetwork!=null) {
-                    //网络已连接
-
-                } else {
-                    //网络连接已断开
-                    bt_update_dialog.setText("网络连接断开");
-                    mNewOrderDialog.show();
-                }
-            }
-        });
-        */
     }
 
     private void connect2print() {
@@ -848,9 +826,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
     @Override
     protected void onDestroy() {
         super.onDestroy();
-
         mHandler.removeCallbacksAndMessages(null);
-
         if (conn != null) {
             unbindService(conn); // unBindService
         }
