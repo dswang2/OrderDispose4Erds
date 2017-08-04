@@ -494,8 +494,12 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
     }
 
 
-    //获取未处理订单列表
+    //获取未处理电影订单列表
+
+
+    //获取未处理点餐订单列表
     public void getUnHandleOrderList() {
+
         try {
             HttpUtil.sendOkHttpRequest(application.getServiceIP() + URL.NewOrder, new Callback() {
 
@@ -517,15 +521,16 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                         return;
                     }
 
-                    //通知主线程，刷新订单列表
+                    // 通知主线程，刷新订单列表
                     datas.clear();
                     datas.addAll(order.getData());
 
-                    //设置 全局最后一次访问网络获取的 订单数目
+                    // 设置 全局最后一次访问网络获取的 订单数目
                     application.setOrderListSize(datas.size());
 
-                    //再次确定类型
+                    // 再次确定类型
                     flag_list = UNHANDLELIST;
+                    // 刷新订单列表
                     mHandler.sendEmptyMessage(2);
 
 
@@ -557,9 +562,10 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
 
                 }
 
+
+
                 @Override
                 public void onFailure(Call call, IOException e) {
-
                 }
             });
         } catch (Exception e) {
