@@ -495,7 +495,25 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
 
 
     //获取未处理电影订单列表
+    private void getUnHandleMoviesOrderList() {
+        try {
+            HttpUtil.sendOkHttpRequest( "http://192.168.0.238:8080/bar/media/getMediaNewOrder.do", new Callback(){
 
+                @Override
+                public void onResponse(Call call, Response response) throws IOException {
+                    String json = response.body().string();
+                    Log.d("dsw_MainActivity2", "电影未处理订单: " + json);
+                }
+
+                @Override
+                public void onFailure(Call call, IOException e) {
+
+                }
+            });
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
 
     //获取未处理点餐订单列表
     public void getUnHandleOrderList() {
@@ -520,6 +538,9 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                     if (order == null) {
                         return;
                     }
+
+                    // 获取未处理订单列表
+                    //getUnHandleMoviesOrderList();
 
                     // 通知主线程，刷新订单列表
                     datas.clear();

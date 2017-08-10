@@ -161,7 +161,7 @@ public class AutoUpdateService extends Service {
                     int preSize = application.getOrderListSize();
                     int nextSize = order.getData().size();
                     Log.d(TAG, "onResponse: preSize = " + preSize + " nextSize = " + nextSize);
-                    // 新的订单列表 长度 大于原有的列表，视为有新消息，并不准确
+                    // 新的订单列表 长度 大于原有的列表，视为有新消息
                     if (preSize < nextSize) {
                         if(application.isVoiceEnable() && mediaPlayer!=null){
                             mediaPlayer.start();
